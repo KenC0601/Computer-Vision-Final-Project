@@ -1,16 +1,43 @@
 #!/bin/bash
 
-# Install Mambaforge (optional, if not already installed)
-# wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh
-# bash Mambaforge-Linux-x86_64.sh
+# Define environment name
+ENV_DIR=".venv"
 
-# Create environment
-mamba create -n bioclip_peft python=3.10 -y
+echo "Setting up Python virtual environment in $ENV_DIR..."
+
+# Check if python3 is available
+if ! command -v python3 &> /dev/null; then
+    echo "Error: python3 could not be found. Please install Python 3."
+    exit 1
+fi
+
+# Create virtual environment if it doesn't exist
+if [ ! -d "$ENV_DIR" ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv "$ENV_DIR"
+else
+    echo "Virtual environment already exists."
+fi
 
 # Activate environment
-source activate bioclip_peft
+echo "Activating environment..."
+source "$ENV_DIR/bin/activate"
+
+# Upgrade pip
+echo "Upgrading pip..."
+pip install --upgrade pip
 
 # Install dependencies
-pip install -r requirements.txt
+if [ -f "requirements.txt" ]; then
+    echo "Installing dependencies from requirements.txt..."
+    pip install -r requirements.txt
+else
+    echo "Warning: requirements.txt not found."
+fi
 
-echo "Environment setup complete. Activate with 'conda activate bioclip_peft' or 'source activate bioclip_peft'"
+echo "----------------------------------------------------------------"
+echo "✅ Environment setup complete."
+echo ""
+echo "To activate the environment, run:"
+echo "source $ENV_DIR/bin/activate"
+echo "----------------------------------------------------------------"

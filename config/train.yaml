@@ -1,0 +1,23 @@
+# Training Configuration
+
+# Dataset
+dataset_name: "plankton" # Options: plankton, insects2
+data_dir: "data/plankton"
+
+# Model
+model_name: "imageomics/bioclip-2"
+method: "flylora" # Options: linear_probe, lora, flylora
+
+# Hyperparameters
+epochs: 50
+batch_size: 32
+learning_rate: 1e-3
+seed: 42
+
+# PEFT Settings
+lora_r: 16
+lora_alpha: 16
+flylora_k: 4
+
+# Output
+output_dir: "experiments"

@@ -1,22 +1,7 @@
+
 import torch
 import torch.nn as nn
 import math
-from peft import LoraConfig, get_peft_model
-
-def apply_lora(model, r=16, lora_alpha=16, target_modules=["q_proj", "v_proj"]):
-    """
-    Applies standard LoRA to the model.
-    """
-    config = LoraConfig(
-        r=r,
-        lora_alpha=lora_alpha,
-        target_modules=target_modules,
-        lora_dropout=0.1,
-        bias="none",
-        modules_to_save=["classifier"], # We need to train the classifier head too
-    )
-    peft_model = get_peft_model(model, config)
-    return peft_model
 
 class FlyLoRALayer(nn.Module):
     def __init__(self, in_features, out_features, r=16, lora_alpha=16, dropout=0.1, k=4):
@@ -32,6 +17,9 @@ class FlyLoRALayer(nn.Module):
         self.scaling = lora_alpha / r
         self.dropout = nn.Dropout(p=dropout)
         self.k = k
+        
+        if k > r:
+            raise ValueError(f"k ({k}) must be <= r ({r})")
         
         # Down projection (A)
         self.lora_A = nn.Linear(in_features, r, bias=False)
@@ -64,12 +52,6 @@ class FlyLoRALayer(nn.Module):
         router_logits = self.router(h) # [batch, tokens, r]
         
         # 2. k-Winners-Take-All (Top-k)
-        # We want to keep the top k values and zero out the rest.
-        # Or create a binary mask?
-        # "Mixture-of-Experts" usually implies weighting.
-        # If we just mask, we are selecting experts.
-        # Let's use the values of h where mask is 1.
-        
         topk_values, topk_indices = torch.topk(router_logits, self.k, dim=-1)
         
         # Create mask
@@ -85,11 +67,25 @@ class FlyLoRALayer(nn.Module):
         
         return output * self.scaling
 
-def apply_flylora(model, r=16, k=8, target_modules=["q_proj", "v_proj"]):
+class FlyLoRAWrapper(nn.Module):
+    def __init__(self, original_layer, fly_layer):
+        super().__init__()
+        self.original_layer = original_layer
+        self.fly_layer = fly_layer
+        
+        # Freeze original
+        self.original_layer.weight.requires_grad = False
+        if self.original_layer.bias is not None:
+            self.original_layer.bias.requires_grad = False
+            
+    def forward(self, x):
+        return self.original_layer(x) + self.fly_layer(x)
+
+def apply_flylora(model, r=16, k=8, target_modules=["c_fc", "out_proj"]):
     """
     Applies FlyLoRA to the model by replacing target Linear layers.
     """
-    print(f"Applying FlyLoRA with r={r}, k={k}...")
+    print(f"Applying FlyLoRA with r={r}, k={k}, targets={target_modules}...")
     
     # Helper to replace modules
     def replace_module(module, name_path=""):
@@ -106,29 +102,6 @@ def apply_flylora(model, r=16, k=8, target_modules=["q_proj", "v_proj"]):
                     k=k
                 )
                 
-                # We need to wrap the original weight? 
-                # LoRA usually adds to the original weight: W = W0 + BA
-                # So we need to keep W0.
-                # But we are replacing the layer.
-                # We should create a wrapper that holds the original Linear and the FlyLoRA.
-                
-                # Let's define a wrapper class locally or use a structure similar to PEFT.
-                # For simplicity, we'll assume we can just add the FlyLoRA output to the original output.
-                
-                class FlyLoRAWrapper(nn.Module):
-                    def __init__(self, original_layer, fly_layer):
-                        super().__init__()
-                        self.original_layer = original_layer
-                        self.fly_layer = fly_layer
-                        
-                        # Freeze original
-                        self.original_layer.weight.requires_grad = False
-                        if self.original_layer.bias is not None:
-                            self.original_layer.bias.requires_grad = False
-                            
-                    def forward(self, x):
-                        return self.original_layer(x) + self.fly_layer(x)
-                
                 wrapper = FlyLoRAWrapper(child, fly_layer)
                 setattr(module, name, wrapper)
                 
@@ -139,10 +112,14 @@ def apply_flylora(model, r=16, k=8, target_modules=["q_proj", "v_proj"]):
     
     # Ensure classifier is trainable
     for name, param in model.named_parameters():
-        if "classifier" in name or "fly_layer" in name:
+        if "classifier" in name:
             param.requires_grad = True
+        elif "fly_layer" in name:
+            if "router" in name:
+                param.requires_grad = False
+            else:
+                param.requires_grad = True
         else:
             param.requires_grad = False
             
     return model
-

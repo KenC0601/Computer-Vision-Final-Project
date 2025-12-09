@@ -8,7 +8,7 @@ import yaml
 
 from src.dataset import get_dataloaders
 from src.models import BioCLIPClassifier
-from src.peft_methods import apply_lora, apply_flylora
+from src.peft import apply_lora, apply_flylora, apply_linear_probe
 
 def train_one_epoch(model, loader, criterion, optimizer, device):
     model.train()
@@ -53,15 +53,55 @@ def evaluate(model, loader, criterion, device):
 
 def main():
     parser = argparse.ArgumentParser(description="BioCLIP 2 PEFT Training")
-    parser.add_argument("--data_dir", type=str, required=True, help="Path to dataset")
-    parser.add_argument("--dataset_name", type=str, default="plankton", choices=["plankton", "insects2"])
-    parser.add_argument("--method", type=str, default="linear_probe", choices=["linear_probe", "lora", "flylora"])
-    parser.add_argument("--epochs", type=int, default=50)
-    parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--output_dir", type=str, default="experiments")
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--config", type=str, help="Path to config yaml file")
+    parser.add_argument("--data_dir", type=str, help="Path to dataset")
+    parser.add_argument("--dataset_name", type=str, choices=["plankton", "insects2"])
+    parser.add_argument("--method", type=str, choices=["linear_probe", "lora", "flylora"])
+    parser.add_argument("--epochs", type=int)
+    parser.add_argument("--batch_size", type=int)
+    parser.add_argument("--lr", type=float)
+    parser.add_argument("--output_dir", type=str)
+    parser.add_argument("--seed", type=int)
     args = parser.parse_args()
+    
+    # Load config if provided
+    config = {}
+    if args.config:
+        with open(args.config, 'r') as f:
+            config = yaml.safe_load(f)
+            
+    # Helper to get value from args or config or default
+    def get_arg(name, default=None):
+        val = getattr(args, name)
+        if val is not None:
+            return val
+        if name in config:
+            return config[name]
+        return default
+
+    # Set values
+    data_dir = get_arg("data_dir")
+    if data_dir is None:
+        raise ValueError("data_dir must be provided via args or config")
+        
+    dataset_name = get_arg("dataset_name", "plankton")
+    method = get_arg("method", "linear_probe")
+    epochs = get_arg("epochs", 50)
+    batch_size = get_arg("batch_size", 32)
+    lr = get_arg("lr", 1e-3)
+    # Note: config uses 'learning_rate', args uses 'lr'. Handle mismatch if needed.
+    if lr is None and "learning_rate" in config:
+        lr = config["learning_rate"]
+        
+    output_dir = get_arg("output_dir", "experiments")
+    seed = get_arg("seed", 42)
+    
+    print(f"Configuration:")
+    print(f"  Dataset: {dataset_name} ({data_dir})")
+    print(f"  Method: {method}")
+    print(f"  Epochs: {epochs}")
+    print(f"  Batch Size: {batch_size}")
+    print(f"  LR: {lr}")
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -80,11 +120,11 @@ def main():
     del temp_model
     
     # Load Data
-    print(f"Loading {args.dataset_name} dataset from {args.data_dir}...")
+    print(f"Loading {dataset_name} dataset from {data_dir}...")
     train_loader, val_loader, test_loader, classes = get_dataloaders(
-        args.data_dir, 
-        batch_size=args.batch_size, 
-        seed=args.seed,
+        data_dir, 
+        batch_size=batch_size, 
+        seed=seed,
         transform=preprocess
     )
     num_classes = len(classes)
@@ -94,32 +134,31 @@ def main():
     model = BioCLIPClassifier(num_classes=num_classes)
     
     # Apply Method
-    if args.method == "lora":
+    if method == "lora":
         print("Applying LoRA...")
         model = apply_lora(model)
-    elif args.method == "flylora":
+    elif method == "flylora":
         print("Applying FlyLoRA...")
         model = apply_flylora(model)
     else:
         print("Using Linear Probe (default)...")
-        # Ensure visual encoder is frozen (already done in BioCLIPClassifier init)
-        # Only classifier head is trainable
+        model = apply_linear_probe(model)
         
     model = model.to(device)
     
     # Optimizer
     # Only optimize trainable parameters
     params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = optim.AdamW(params, lr=args.lr)
+    optimizer = optim.AdamW(params, lr=lr)
     criterion = nn.CrossEntropyLoss()
     
     # Training Loop
     best_val_acc = 0.0
-    save_path = Path(args.output_dir) / args.dataset_name / args.method
+    save_path = Path(output_dir) / dataset_name / method
     save_path.mkdir(parents=True, exist_ok=True)
     
-    for epoch in range(args.epochs):
-        print(f"\nEpoch {epoch+1}/{args.epochs}")
+    for epoch in range(epochs):
+        print(f"\nEpoch {epoch+1}/{epochs}")
         train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         

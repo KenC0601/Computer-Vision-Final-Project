@@ -12,3 +12,5 @@ tqdm
 pyyaml
 huggingface_hub
 openml
+numpy
+Pillow

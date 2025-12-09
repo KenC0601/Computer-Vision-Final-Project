@@ -1,0 +1,16 @@
+# Evaluation Configuration
+
+# Dataset
+dataset_name: "plankton"
+data_dir: "data/plankton"
+
+# Model
+model_name: "imageomics/bioclip-2"
+method: "flylora"
+
+# Checkpoint
+checkpoint_path: "experiments/plankton/flylora/best_model.pth"
+
+# Settings
+batch_size: 32
+seed: 42
