@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.env
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# VS Code
+.vscode/
+
+# Mac OS
+.DS_Store
+
+# Project Data & Outputs
+data/
+data_download/metadata/
+clean_project/data/
+experiments_tuned/
+experiments/
+report/figures/
+*.parquet
+*.pth
+*.log
+.Identifier
+
+
+# Others
+archive/

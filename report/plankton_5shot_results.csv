@@ -1,0 +1,6 @@
+Dataset,Method,Training Time (s),Accuracy (%)
+Plankton,linear_probe,2.32,38.65
+Plankton,lora,2.29,82.19
+Plankton,flylora,2.46,80.69
+Plankton,dora,2.55,82.84
+Plankton,pissa,2.25,81.16

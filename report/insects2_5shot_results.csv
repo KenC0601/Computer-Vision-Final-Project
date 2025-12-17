@@ -1,0 +1,6 @@
+Dataset,Method,Training Time (s),Accuracy (%)
+Insects 2,linear_probe,2.45,43.32
+Insects 2,lora,2.49,85.32
+Insects 2,flylora,2.72,81.59
+Insects 2,dora,2.86,71.98
+Insects 2,pissa,2.43,69.19

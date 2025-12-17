@@ -1,0 +1,17 @@
+torch>=2.0.0
+torchvision>=0.15.0
+open_clip_torch>=2.20.0
+transformers>=4.30.0
+peft>=0.11.0
+datasets>=2.14.0
+scikit-learn
+pandas
+matplotlib
+seaborn
+tqdm
+pyyaml
+huggingface_hub
+openml
+numpy
+Pillow
+requests
